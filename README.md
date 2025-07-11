@@ -29,7 +29,7 @@ Face Tracking 기능을 수행하고 LLM을 탑재하여 사용자와 대화를 
 
 * (프로젝트 아키텍쳐 기술, 전반적인 diagram 으로 설명을 권장)
 ### 유스케이스 다이어그램
-
+![diagram](./usecase_diagram.png)
 ## Clone code
 
 프로젝트를 clone하는 방법을 설명합니다.
