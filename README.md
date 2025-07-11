@@ -27,7 +27,6 @@ Face Tracking 기능을 수행하고 LLM을 탑재하여 사용자와 대화를 
 - **물리적 구조**: 몸통(전자부품) + 머리(ESP32-S3-CAM + 센서/액추에이터)
 - **전원**: USB-C PD + DC-DC 변환 (로봇 전용), 라즈베리파이는 독립 전원
 
-* (프로젝트 아키텍쳐 기술, 전반적인 diagram 으로 설명을 권장)
 ### 유스케이스 다이어그램
 ![diagram](./usecase_diagram.png)
 ## Clone code
