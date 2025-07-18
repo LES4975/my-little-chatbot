@@ -4,3 +4,4 @@ audio_test/
 *.wav
 *.json
 *.mp3
+venv
