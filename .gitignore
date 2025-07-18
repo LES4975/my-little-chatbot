@@ -2,3 +2,5 @@
 .venv
 audio_test/
 *.wav
+*.json
+*.mp3
