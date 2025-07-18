@@ -99,8 +99,10 @@ class STTTester:
             # 실제 녹음 시간 계산
             actual_duration = len(frames) * self.CHUNK / self.RATE
             print(f"📊 실제 녹음 시간: {actual_duration:.1f}초")
+            return True
         else:
             print("❌ 녹음된 데이터가 없습니다.")
+            return False
     
     def transcribe_audio(self, audio_file_path):
         """OpenAI Whisper API로 STT 변환"""
@@ -120,12 +122,129 @@ class STTTester:
             print(f"❌ STT 변환 중 오류 발생: {e}")
             return None
     
+    def record_and_transcribe(self):
+        """음성 녹음 및 STT 변환을 한 번에 수행 (main.py용)"""
+        # 임시 파일 생성
+        temp_audio_file = tempfile.mktemp(suffix=".wav")
+        
+        try:
+            # 음성 녹음
+            record_success = self.record_audio(temp_audio_file)
+            if not record_success:
+                return None
+            
+            # STT 변환
+            transcript = self.transcribe_audio(temp_audio_file)
+            return transcript
+            
+        except Exception as e:
+            print(f"❌ 음성 처리 중 오류: {e}")
+            return None
+        finally:
+            # 임시 파일 정리
+            if os.path.exists(temp_audio_file):
+                os.remove(temp_audio_file)
+    
+    def simple_record_and_transcribe(self, show_progress=True):
+        """간소화된 음성 녹음 및 STT 변환 (로그 최소화)"""
+        temp_audio_file = tempfile.mktemp(suffix=".wav")
+        
+        try:
+            if show_progress:
+                print("🎤 음성 입력을 시작합니다...")
+            
+            # 음성 녹음 (진행상황 표시 제어)
+            record_success = self._simple_record(temp_audio_file, show_progress)
+            if not record_success:
+                return None
+            
+            if show_progress:
+                print("🤖 음성을 텍스트로 변환 중...")
+            
+            # STT 변환
+            transcript = self.transcribe_audio(temp_audio_file)
+            
+            if transcript and show_progress:
+                print(f"✅ 음성 인식 완료: '{transcript}'")
+            
+            return transcript
+            
+        except Exception as e:
+            if show_progress:
+                print(f"❌ 음성 처리 중 오류: {e}")
+            return None
+        finally:
+            if os.path.exists(temp_audio_file):
+                os.remove(temp_audio_file)
+    
+    def _simple_record(self, filename, show_progress=True):
+        """간소화된 음성 녹음 (내부 메서드)"""
+        stream = self.audio.open(
+            format=self.FORMAT,
+            channels=self.CHANNELS,
+            rate=self.RATE,
+            input=True,
+            frames_per_buffer=self.CHUNK
+        )
+        
+        frames = []
+        stop_recording = False
+        
+        def check_keyboard_input():
+            nonlocal stop_recording
+            try:
+                input()
+                stop_recording = True
+            except:
+                pass
+        
+        keyboard_thread = threading.Thread(target=check_keyboard_input, daemon=True)
+        keyboard_thread.start()
+        
+        total_frames = int(self.RATE / self.CHUNK * self.RECORD_SECONDS)
+        
+        for i in range(total_frames):
+            if stop_recording:
+                if show_progress:
+                    print("⏹️  녹음 중단")
+                break
+                
+            try:
+                data = stream.read(self.CHUNK, exception_on_overflow=False)
+                frames.append(data)
+                
+                # 간소화된 진행상황 표시
+                if show_progress and i % (int(self.RATE / self.CHUNK * 3)) == 0:
+                    elapsed = int(i / (self.RATE / self.CHUNK))
+                    remaining = self.RECORD_SECONDS - elapsed
+                    print(f"⏱️  {remaining}초 남음...")
+            
+            except Exception as e:
+                if show_progress:
+                    print(f"⚠️ 녹음 중 오류: {e}")
+                break
+        
+        stream.stop_stream()
+        stream.close()
+        
+        # WAV 파일로 저장
+        if frames:
+            wf = wave.open(filename, 'wb')
+            wf.setnchannels(self.CHANNELS)
+            wf.setsampwidth(self.audio.get_sample_size(self.FORMAT))
+            wf.setframerate(self.RATE)
+            wf.writeframes(b''.join(frames))
+            wf.close()
+            return True
+        else:
+            return False
+    
     def cleanup(self):
         """PyAudio 종료"""
         self.audio.terminate()
     
     def run_test(self):
-        """STT 테스트 실행"""
+        """STT 테스트 실행 (기존 독립 실행용 메서드 유지)"""
         # 임시 파일 생성
         temp_audio_file = tempfile.mktemp(suffix=".wav")
         
