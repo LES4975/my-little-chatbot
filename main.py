@@ -20,6 +20,7 @@ from tts import GoogleTTSClient
 # .env 파일 로드
 load_dotenv()
 
+
 # FastAPI 앱 초기화
 app = FastAPI(
     title="Robot Conversation API",
@@ -64,6 +65,9 @@ class RobotConversationSystem:
         
         print("🤖 로봇 대화 시스템 초기화 완료")
         print(f"🌐 GPU 서버: {self.gpu_server_url}")
+
+        # API 키 설정
+        self.api_key = os.getenv("GPU_SERVER_API_KEY")
     
     async def initialize_clients(self):
         """STT, TTS 클라이언트 비동기 초기화"""
@@ -125,12 +129,18 @@ class RobotConversationSystem:
             print(f"📤 GPU 서버로 전송: '{user_text[:50]}{'...' if len(user_text) > 50 else ''}'")
             
             # 비동기 HTTP 요청
+            headers = {
+                "X-API-Key": self.api_key,
+                "Content-Type": "application/json"
+            } 
+
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
                 lambda: requests.post(
                     self.gpu_server_endpoint,
                     json=request_data,
+                    headers=headers, # 추가
                     timeout=30
                 )
             )
@@ -271,6 +281,7 @@ class RobotConversationSystem:
             print("🧹 리소스 정리 완료")
         except Exception as e:
             print(f"⚠️ 리소스 정리 중 오류: {e}")
+
 
 # API 엔드포인트 정의
 
