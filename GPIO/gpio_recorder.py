@@ -18,16 +18,22 @@ class GPIORecorder:
         self.initialized = False
 
     def button_init(self):
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(self.button_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        
-        GPIO.add_event_detect(self.button_pin, GPIO.BOTH,
-                                callback=self._button_event_handler,
-                                bouncetime=50)
-        
-        self.initialized = True
-        print("GPIO 초기화")
-        return True
+        try:
+            GPIO.setmode(GPIO.BCM)
+            GPIO.setup(self.button_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+            
+            GPIO.add_event_detect(self.button_pin, GPIO.BOTH,
+                                    callback=self._button_event_handler,
+                                    bouncetime=50)
+            
+            self.initialized = True
+            print("✅ GPIO 초기화 성공")
+            return True
+            
+        except Exception as e:
+            print(f"❌ GPIO 초기화 실패: {e}")
+            self.initialized = False
+            return False
 
     def _button_event_handler(self, channel):
         current_time = time.time()

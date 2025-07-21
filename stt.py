@@ -9,6 +9,9 @@ import threading
 import select
 import sys
 
+# GPIO 컨트롤러 import
+from GPIO.gpio_recorder import get_gpio_recorder
+
 # .env 파일 로드
 load_dotenv()
 
@@ -22,84 +25,103 @@ class STTTester:
         self.FORMAT = pyaudio.paInt16
         self.CHANNELS = 1
         self.RATE = 16000  # Whisper 최적화 샘플링 레이트
-        self.RECORD_SECONDS = 10
         
         # PyAudio 초기화
         self.audio = pyaudio.PyAudio()
+        
+        # GPIO 컨트롤러 (녹음 제어용)
+        self.gpio_recorder = None
+        
+        # 녹음 제어 플래그
+        self.recording_active = False
+        self.recording_stopped = False
     
-    def record_audio(self, filename):
-        """최대 10초간 오디오 녹음 (Enter 키로 조기 종료 가능)"""
-        print("🎤 최대 10초간 음성을 녹음합니다...")
-        print("💡 Enter 키를 누르면 언제든 녹음을 종료할 수 있습니다.")
-        print("3... 2... 1... 시작!")
+    def initialize_gpio(self):
+        """GPIO 컨트롤러 초기화 (필요시)"""
+        if self.gpio_recorder is None:
+            self.gpio_recorder = get_gpio_recorder()
+            if not self.gpio_recorder.button_init():
+                print("⚠️ GPIO 초기화 실패")
+                return False
+        return True
+    
+
+    
+    def gpio_record_audio(self, filename):
+        """GPIO 택트 스위치 기반 오디오 녹음 (즉시 시작)"""
+        if not self.initialize_gpio():
+            print("❌ GPIO 초기화 실패")
+            return False
         
-        stream = self.audio.open(
-            format=self.FORMAT,
-            channels=self.CHANNELS,
-            rate=self.RATE,
-            input=True,
-            frames_per_buffer=self.CHUNK
-        )
+        print("📝 녹음 시작! (버튼을 뗄 때까지 녹음됩니다)")
         
-        frames = []
-        stop_recording = False
-        
-        def check_keyboard_input():
-            """키보드 입력 감지 (별도 스레드)"""
-            nonlocal stop_recording
-            try:
-                input()  # Enter 키 대기
-                stop_recording = True
-            except:
-                pass
-        
-        # 키보드 입력 감지 스레드 시작
-        keyboard_thread = threading.Thread(target=check_keyboard_input, daemon=True)
-        keyboard_thread.start()
-        
-        total_frames = int(self.RATE / self.CHUNK * self.RECORD_SECONDS)
-        
-        # 녹음 루프
-        for i in range(total_frames):
-            if stop_recording:
-                print("⏹️  사용자가 녹음을 중단했습니다.")
-                break
-                
-            try:
-                data = stream.read(self.CHUNK, exception_on_overflow=False)
-                frames.append(data)
-                
-                # 진행상황 표시 (2초마다)
-                if i % (int(self.RATE / self.CHUNK * 2)) == 0:
-                    elapsed = int(i / (self.RATE / self.CHUNK))
-                    remaining = self.RECORD_SECONDS - elapsed
-                    print(f"⏱️  {remaining}초 남음... (Enter로 종료)")
+        stream = None
+        try:
+            stream = self.audio.open(
+                format=self.FORMAT,
+                channels=self.CHANNELS,
+                rate=self.RATE,
+                input=True,
+                frames_per_buffer=self.CHUNK
+            )
             
-            except Exception as e:
-                print(f"⚠️ 녹음 중 오류: {e}")
-                break
-        
-        if not stop_recording:
-            print("⏰ 최대 녹음 시간(10초) 완료!")
-        
-        print("✅ 녹음 완료!")
-        
-        stream.stop_stream()
-        stream.close()
+            frames = []
+            start_time = time.time()
+            
+            # GPIO 버튼이 눌려있는 동안 녹음 지속
+            while self.gpio_recorder.is_pressed():
+                try:
+                    # 비블로킹 방식으로 오디오 데이터 읽기
+                    data = stream.read(self.CHUNK, exception_on_overflow=False)
+                    frames.append(data)
+                    
+                    # 진행상황 표시 (1초마다)
+                    current_time = time.time()
+                    elapsed = current_time - start_time
+                    if int(elapsed) % 1 == 0 and len(frames) % (self.RATE // self.CHUNK) == 0:
+                        print(f"⏱️  녹음 중... ({elapsed:.1f}초)")
+                    
+                    # 다른 스레드 실행을 위한 최소 대기
+                    time.sleep(0.001)
+                    
+                except Exception as e:
+                    print(f"⚠️ 녹음 중 오류: {e}")
+                    break
+            
+            print("🛑 스위치에서 손을 뗐습니다. 녹음 종료!")
+            
+        except Exception as e:
+            print(f"❌ 오디오 스트림 생성 실패: {e}")
+            return False
+            
+        finally:
+            # 스트림 정리 (예외 발생해도 반드시 실행)
+            if stream:
+                try:
+                    stream.stop_stream()
+                    stream.close()
+                    print("🧹 오디오 스트림 정리 완료")
+                except Exception as e:
+                    print(f"⚠️ 스트림 정리 중 오류: {e}")
         
         # WAV 파일로 저장
-        if frames:  # 녹음된 데이터가 있을 때만 저장
-            wf = wave.open(filename, 'wb')
-            wf.setnchannels(self.CHANNELS)
-            wf.setsampwidth(self.audio.get_sample_size(self.FORMAT))
-            wf.setframerate(self.RATE)
-            wf.writeframes(b''.join(frames))
-            wf.close()
-            
-            # 실제 녹음 시간 계산
-            actual_duration = len(frames) * self.CHUNK / self.RATE
-            print(f"📊 실제 녹음 시간: {actual_duration:.1f}초")
-            return True
+        if frames:
+            try:
+                wf = wave.open(filename, 'wb')
+                wf.setnchannels(self.CHANNELS)
+                wf.setsampwidth(self.audio.get_sample_size(self.FORMAT))
+                wf.setframerate(self.RATE)
+                wf.writeframes(b''.join(frames))
+                wf.close()
+                
+                # 실제 녹음 시간 계산
+                actual_duration = len(frames) * self.CHUNK / self.RATE
+                print(f"📊 실제 녹음 시간: {actual_duration:.1f}초")
+                return True
+                
+            except Exception as e:
+                print(f"❌ 파일 저장 실패: {e}")
+                return False
         else:
             print("❌ 녹음된 데이터가 없습니다.")
             return False
@@ -122,39 +144,18 @@ class STTTester:
             print(f"❌ STT 변환 중 오류 발생: {e}")
             return None
     
-    def record_and_transcribe(self):
-        """음성 녹음 및 STT 변환을 한 번에 수행 (main.py용)"""
-        # 임시 파일 생성
-        temp_audio_file = tempfile.mktemp(suffix=".wav")
-        
-        try:
-            # 음성 녹음
-            record_success = self.record_audio(temp_audio_file)
-            if not record_success:
-                return None
-            
-            # STT 변환
-            transcript = self.transcribe_audio(temp_audio_file)
-            return transcript
-            
-        except Exception as e:
-            print(f"❌ 음성 처리 중 오류: {e}")
-            return None
-        finally:
-            # 임시 파일 정리
-            if os.path.exists(temp_audio_file):
-                os.remove(temp_audio_file)
+
     
-    def simple_record_and_transcribe(self, show_progress=True):
-        """간소화된 음성 녹음 및 STT 변환 (로그 최소화)"""
+    def gpio_record_and_transcribe(self, show_progress=True):
+        """GPIO 기반 음성 녹음 및 STT 변환 (새로운 main.py용 메서드)"""
         temp_audio_file = tempfile.mktemp(suffix=".wav")
         
         try:
             if show_progress:
-                print("🎤 음성 입력을 시작합니다...")
+                print("🎤 GPIO 기반 음성 입력을 시작합니다...")
             
-            # 음성 녹음 (진행상황 표시 제어)
-            record_success = self._simple_record(temp_audio_file, show_progress)
+            # GPIO 기반 음성 녹음
+            record_success = self.gpio_record_audio(temp_audio_file)
             if not record_success:
                 return None
             
@@ -177,84 +178,36 @@ class STTTester:
             if os.path.exists(temp_audio_file):
                 os.remove(temp_audio_file)
     
-    def _simple_record(self, filename, show_progress=True):
-        """간소화된 음성 녹음 (내부 메서드)"""
-        stream = self.audio.open(
-            format=self.FORMAT,
-            channels=self.CHANNELS,
-            rate=self.RATE,
-            input=True,
-            frames_per_buffer=self.CHUNK
-        )
-        
-        frames = []
-        stop_recording = False
-        
-        def check_keyboard_input():
-            nonlocal stop_recording
-            try:
-                input()
-                stop_recording = True
-            except:
-                pass
-        
-        keyboard_thread = threading.Thread(target=check_keyboard_input, daemon=True)
-        keyboard_thread.start()
-        
-        total_frames = int(self.RATE / self.CHUNK * self.RECORD_SECONDS)
-        
-        for i in range(total_frames):
-            if stop_recording:
-                if show_progress:
-                    print("⏹️  녹음 중단")
-                break
-                
-            try:
-                data = stream.read(self.CHUNK, exception_on_overflow=False)
-                frames.append(data)
-                
-                # 간소화된 진행상황 표시
-                if show_progress and i % (int(self.RATE / self.CHUNK * 3)) == 0:
-                    elapsed = int(i / (self.RATE / self.CHUNK))
-                    remaining = self.RECORD_SECONDS - elapsed
-                    print(f"⏱️  {remaining}초 남음...")
-            
-            except Exception as e:
-                if show_progress:
-                    print(f"⚠️ 녹음 중 오류: {e}")
-                break
-        
-        stream.stop_stream()
-        stream.close()
-        
-        # WAV 파일로 저장
-        if frames:
-            wf = wave.open(filename, 'wb')
-            wf.setnchannels(self.CHANNELS)
-            wf.setsampwidth(self.audio.get_sample_size(self.FORMAT))
-            wf.setframerate(self.RATE)
-            wf.writeframes(b''.join(frames))
-            wf.close()
-            return True
-        else:
-            return False
+    def simple_record_and_transcribe(self, show_progress=True):
+        """GPIO 기반 음성 녹음 및 STT 변환 (main.py용 메서드)"""
+        return self.gpio_record_and_transcribe(show_progress)
+    
+
     
     def cleanup(self):
-        """PyAudio 종료"""
-        self.audio.terminate()
+        """PyAudio 종료 및 리소스 정리"""
+        try:
+            if hasattr(self, 'audio') and self.audio:
+                self.audio.terminate()
+                print("🧹 PyAudio 리소스 정리 완료")
+        except Exception as e:
+            print(f"⚠️ PyAudio 정리 중 오류: {e}")
     
     def run_test(self):
-        """STT 테스트 실행 (기존 독립 실행용 메서드 유지)"""
+        """GPIO 기반 STT 테스트 실행"""
         # 임시 파일 생성
         temp_audio_file = tempfile.mktemp(suffix=".wav")
         
         try:
             print("=" * 50)
-            print("🎯 STT 테스트 시작")
+            print("🎯 GPIO 기반 STT 테스트 시작")
             print("=" * 50)
             
-            # 오디오 녹음
-            self.record_audio(temp_audio_file)
+            # GPIO 기반 오디오 녹음
+            record_success = self.gpio_record_audio(temp_audio_file)
+            if not record_success:
+                print("❌ 녹음 실패")
+                return None
             
             # STT 변환
             transcript = self.transcribe_audio(temp_audio_file)
@@ -265,9 +218,6 @@ class STTTester:
                 print("✅ STT 결과:")
                 print(f"📝 \"{transcript}\"")
                 print("=" * 50)
-                
-                # GPU 서버 전송 준비 (나중에 구현)
-                print("💡 다음 단계: GPU 서버로 텍스트 전송")
                 return transcript
             else:
                 print("❌ STT 변환 실패")
