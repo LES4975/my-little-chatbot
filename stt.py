@@ -128,13 +128,13 @@ class STTTester:
             return False
     
     def transcribe_audio(self, audio_file_path):
-        """OpenAI Whisper API로 STT 변환"""
+        """OpenAI API로 STT 변환"""
         print("🤖 음성을 텍스트로 변환 중...")
         
         try:
             with open(audio_file_path, "rb") as audio_file:
                 transcript = self.client.audio.transcriptions.create(
-                    model="whisper-1",
+                    model="gpt-4o-transcribe", # whisper-1보다 좋은 성능
                     file=audio_file,
                     language="ko"  # 한국어 설정
                 )

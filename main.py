@@ -5,6 +5,11 @@
 GPIO 택트 스위치로 로봇 제어 + 외부에서 API 요청도 가능
 """
 
+"""
+실행 커맨드
+sudo -E -u $USER PULSE_SERVER="unix:/run/user/$(id -u)/pulse/native" XDG_RUNTIME_DIR="/run/user/$(id -u)" /home/test/intel_project/.venv/bin/python main.py
+"""
+
 import os
 import asyncio
 import requests
