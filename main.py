@@ -292,6 +292,7 @@ class RobotConversationSystem:
                 self.tts_client.simple_text_to_speech_and_play,
                 response_text,
                 output_file,
+                "ko-KR-Wavenet-A",
                 False  # show_progress=False
             )
             

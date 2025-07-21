@@ -47,7 +47,7 @@ class GoogleTTSClient:
         print(f"✅ Google Cloud 인증 파일 확인: {credentials_path}")
         return True
     
-    def text_to_speech(self, text, language_code="ko-KR", voice_name="ko-KR-Wavenet-A"):
+    def text_to_speech(self, text, language_code="ko-KR", voice_name="ko-KR-Wavenet-A", show_progress=True):
         """
         텍스트를 음성으로 변환
         

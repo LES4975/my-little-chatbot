@@ -40,12 +40,12 @@ class STTTester:
         """GPIO 컨트롤러 초기화 (필요시)"""
         if self.gpio_recorder is None:
             self.gpio_recorder = get_gpio_recorder()
-            if not self.gpio_recorder.button_init():
-                print("⚠️ GPIO 초기화 실패")
-                return False
+            # 이미 초기화되어 있다면 다시 초기화하지 않음
+            if not self.gpio_recorder.initialized:
+                if not self.gpio_recorder.button_init():
+                    print("⚠️ GPIO 초기화 실패")
+                    return False
         return True
-    
-
     
     def gpio_record_audio(self, filename):
         """GPIO 택트 스위치 기반 오디오 녹음 (즉시 시작)"""
@@ -62,6 +62,7 @@ class STTTester:
                 channels=self.CHANNELS,
                 rate=self.RATE,
                 input=True,
+                input_device_index=6,  # pulse 장치 사용
                 frames_per_buffer=self.CHUNK
             )
             
