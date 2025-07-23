@@ -62,7 +62,7 @@ class STTTester:
                 channels=self.CHANNELS,
                 rate=self.RATE,
                 input=True,
-                input_device_index=6,  # pulse 장치 사용
+                # input_device_index=6,  # pulse 장치 사용
                 frames_per_buffer=self.CHUNK
             )
             

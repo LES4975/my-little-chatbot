@@ -2,12 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-이 코드는 실제로 라즈베리파이에서 동작하지 않습니다.
-LLM을 가동할 수 있는 GPU가 마련된 환경에 이 파일이 있어야 합니다.
-server.py와 같은 위치에 있어야 합니다.
-"""
-"""
-Midm-2.0-Mini-Instruct 모델 로딩 및 추론 처리 모듈 (감정 분석 지원)
+Midm-2.0-Mini-Instruct 모델 로딩 및 추론 처리 모듈 (2단계 감정 분석)
 """
 
 import torch
@@ -19,7 +14,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 
 
 class MidmLLMHandler:
-    """Midm-2.0-Mini-Instruct 모델 핸들러 (감정 분석 지원)"""
+    """Midm-2.0-Mini-Instruct 모델 핸들러 (2단계 감정 분석)"""
 
     def __init__(self, model_name: str = "K-intelligence/Midm-2.0-Mini-Instruct"):
         """
@@ -34,19 +29,24 @@ class MidmLLMHandler:
         self.generation_config = None
         self.device = None
 
-        # 감정 키워드 사전 (emotion_keyword.txt 기반)
-        self.emotion_keywords = {
-            "angry": ["화나", "분노", "짜증나", "빡쳐", "열받아", "악", "미치겠어"],
-            "disgust": ["역겨워", "구역질", "토할", "혐오", "더러워", "징그러워"],
-            "fear": ["무서워", "두려워", "겁나", "공포", "떨려", "불안해"],
-            "happy": ["행복", "좋아", "사랑", "기뻐", "즐거워", "신나", "웃음", "감사"],
-            "sad": ["슬퍼", "눈물", "우울", "울고", "외로워", "속상해", "힘들어"],
-            "surprise": ["놀라워", "헉", "어머", "세상에", "헐", "와", "대박"]
-        }
+        # 감정 키워드 목록
+        self.emotion_keywords = ["happy", "sad", "angry", "fear", "surprise", "disgust", "neutral"]
 
-        # 시스템 프롬프트 (감정 키워드 지시 포함)
-        emotion_list = ", ".join(self.emotion_keywords.keys())
-        self.system_prompt = f"친절하고 공감해주는 태도로 대화해줘. 친구와 대화하듯 친근감있는 말투를 사용해. 대답은 반말로 해. 중요: 모든 응답은 반드시 2문장 이내로 대답하세요. 응답 마지막에 [emotion:감정키워드] 형태로 네 응답의 감정을 표시해줘. 사용 가능한 감정: {emotion_list}"
+        # 1단계: 대화 응답 생성용 시스템 프롬프트 (단순화)
+        self.conversation_prompt = (
+            "공감해주는 태도로 대화해줘. "
+            "친구와 대화하듯 친근감있는 말투를 사용해. "
+            "대답은 반말로 해. "
+            "중요: 모든 응답은 반드시 2문장 이내로 대답해."
+        )
+
+        # 2단계: 감정 분석용 시스템 프롬프트
+        emotion_list = ", ".join(self.emotion_keywords)
+        self.emotion_analysis_prompt = (
+            f"다음 사용자 메시지의 감정을 분석해서 가장 적절한 감정 키워드 하나만 답해줘. "
+            f"사용 가능한 감정: {emotion_list}. "
+            f"감정 키워드 하나만 정확히 답해."
+        )
 
         # 모델 로드
         self._load_model()
@@ -93,18 +93,20 @@ class MidmLLMHandler:
             print(f"❌ 모델 로딩 실패: {e}")
             raise
 
-    def generate_response(
+    def _generate_llm_response(
             self,
+            system_prompt: str,
             user_message: str,
-            max_length: int = 100,  # 2문장은 보통 100토큰 이내
-            temperature: float = 0.7,
+            max_length: int = 100,
+            temperature: float = 0.3,
             top_p: float = 0.9,
             do_sample: bool = True
-    ) -> Tuple[str, str]:
+    ) -> str:
         """
-        사용자 메시지에 대한 AI 응답 생성 (감정 키워드 포함)
+        LLM 응답 생성 (내부 공통 메서드)
 
         Args:
+            system_prompt: 시스템 프롬프트
             user_message: 사용자 입력 텍스트
             max_length: 최대 생성 토큰 수
             temperature: 생성 온도 (0.0 ~ 1.0)
@@ -112,7 +114,7 @@ class MidmLLMHandler:
             do_sample: 샘플링 사용 여부
 
         Returns:
-            Tuple[str, str]: (정리된 응답 텍스트, 감정 키워드)
+            str: 생성된 응답 텍스트
         """
         if not self.model or not self.tokenizer:
             raise RuntimeError("모델이 로드되지 않았습니다.")
@@ -120,7 +122,7 @@ class MidmLLMHandler:
         try:
             # 대화 형식으로 메시지 구성
             messages = [
-                {"role": "system", "content": self.system_prompt},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message}
             ]
 
@@ -156,40 +158,93 @@ class MidmLLMHandler:
             response_ids = output_ids[0][input_ids.shape[1]:]
             response_text = self.tokenizer.decode(response_ids, skip_special_tokens=True)
 
-            # 응답 정리 및 감정 추출
-            cleaned_response, emotion = self._clean_response_and_extract_emotion(response_text)
-
-            return cleaned_response, emotion
+            return response_text.strip()
 
         except Exception as e:
-            print(f"❌ 응답 생성 중 오류: {e}")
+            print(f"❌ LLM 응답 생성 중 오류: {e}")
             raise
 
-    def _clean_response_and_extract_emotion(self, response: str) -> Tuple[str, str]:
+    def generate_conversation_response(
+            self,
+            user_message: str,
+            max_length: int = 100,
+            temperature: float = 0.7
+    ) -> str:
         """
-        생성된 응답 텍스트 정리 및 감정 키워드 추출
+        1단계: 순수한 대화 응답 생성
+
+        Args:
+            user_message: 사용자 입력 텍스트
+            max_length: 최대 생성 토큰 수
+            temperature: 생성 온도
+
+        Returns:
+            str: 대화 응답 텍스트
+        """
+        try:
+            response = self._generate_llm_response(
+                system_prompt=self.conversation_prompt,
+                user_message=user_message,
+                max_length=max_length,
+                temperature=temperature
+            )
+
+            # 응답 정리 (2문장 제한)
+            cleaned_response = self._clean_conversation_response(response)
+            return cleaned_response
+
+        except Exception as e:
+            print(f"❌ 대화 응답 생성 중 오류: {e}")
+            return "미안, 뭐라고 말을 해야 할지 모르겠어."
+
+    def analyze_emotion(self, user_message: str) -> str:
+        """
+        2단계: 생성된 응답의 감정 분석
+
+        Args:
+            user_message: 분석할 응답 텍스트
+
+        Returns:
+            str: 감정 키워드 (happy, sad, angry, fear, surprise, disgust, neutral)
+        """
+        try:
+            # 감정 분석 요청 메시지 구성
+            analysis_request = f"분석할 텍스트: \"{user_message}\""
+
+            emotion_response = self._generate_llm_response(
+                system_prompt=self.emotion_analysis_prompt,
+                user_message=analysis_request,
+                max_length=10,  # 감정 키워드만 반환하므로 짧게
+                temperature=0.3,  # 일관성을 위해 낮은 온도
+                do_sample=False   # 일관성을 위해 샘플링 비활성화
+            )
+
+            # 응답에서 감정 키워드 추출
+            detected_emotion = self._extract_emotion_keyword(emotion_response)
+            return detected_emotion
+
+        except Exception as e:
+            print(f"❌ 감정 분석 중 오류: {e}")
+            return "neutral"
+
+    def _clean_conversation_response(self, response: str) -> str:
+        """
+        대화 응답 텍스트 정리
 
         Args:
             response: 원본 응답 텍스트
 
         Returns:
-            Tuple[str, str]: (정리된 응답 텍스트, 감정 키워드)
+            str: 정리된 응답 텍스트
         """
-        # 불필요한 공백 제거
+        # 불필요한 공백 및 특수 토큰 제거
         response = response.strip()
-
-        # 감정 키워드 추출 (우선 처리)
-        emotion = self._extract_emotion_from_response(response)
-
-        # 감정 태그 제거 [emotion:키워드] 형태
-        emotion_pattern = r'\[emotion:[a-zA-Z_]+\]'
-        response = re.sub(emotion_pattern, '', response, flags=re.IGNORECASE)
 
         # 중복된 줄바꿈 제거
         while "\n\n\n" in response:
             response = response.replace("\n\n\n", "\n\n")
 
-        # 특수 토큰 제거 (남아있을 경우)
+        # 특수 토큰 제거
         special_tokens = ["<|im_start|>", "<|im_end|>", "[/INST]", "</s>"]
         for token in special_tokens:
             response = response.replace(token, "")
@@ -201,12 +256,10 @@ class MidmLLMHandler:
         sentences = [s.strip() for s in sentences if s.strip()]
 
         if len(sentences) > 2:
-            # 처음 2문장만 사용
             sentences = sentences[:2]
             # 원본에서 문장 부호 찾아서 복원
             result = ""
-            for i, sentence in enumerate(sentences):
-                # 원본에서 해당 문장 다음의 구두점 찾기
+            for sentence in sentences:
                 match = re.search(re.escape(sentence) + r'([.!?]+)', response)
                 if match:
                     result += sentence + match.group(1) + " "
@@ -214,24 +267,28 @@ class MidmLLMHandler:
                     result += sentence + ". "
             response = result.strip()
 
-        return response, emotion
+        return response
 
-    def _extract_emotion_from_response(self, response: str) -> str:
+    def _extract_emotion_keyword(self, emotion_response: str) -> str:
         """
-        응답에서 감정 키워드 추출
+        LLM 감정 분석 응답에서 키워드 추출
 
         Args:
-            response: 응답 텍스트
+            emotion_response: LLM의 감정 분석 응답
 
         Returns:
-            str: 감정 키워드 (기본값: "neutral")
+            str: 유효한 감정 키워드
         """
-        # LLM이 지정한 감정 태그 확인 [emotion:키워드]
-        emotion_match = re.search(r'\[emotion:([a-zA-Z_]+)\]', response, re.IGNORECASE)
-        if emotion_match:
-            specified_emotion = emotion_match.group(1).lower()
-            if specified_emotion in self.emotion_keywords:
-                return specified_emotion
+        # 응답 정리
+        emotion_response = emotion_response.strip().lower()
+
+        # 유효한 감정 키워드 찾기
+        for emotion in self.emotion_keywords:
+            if emotion in emotion_response:
+                return emotion
+
+        # 키워드를 찾지 못한 경우 기본값
+        print(f"⚠️ 감정 키워드를 찾을 수 없음: '{emotion_response}' -> 'neutral'로 설정")
         return "neutral"
 
     def generate_response_with_emotion(
@@ -241,7 +298,7 @@ class MidmLLMHandler:
             temperature: float = 0.7
     ) -> Dict[str, str]:
         """
-        감정 정보가 포함된 응답 생성 (API용 편의 메서드)
+        2단계 프로세스로 응답 생성 및 감정 분석
 
         Args:
             user_message: 사용자 입력 텍스트
@@ -252,29 +309,55 @@ class MidmLLMHandler:
             Dict: {"response": 응답텍스트, "emotion": 감정키워드}
         """
         try:
-            response_text, emotion = self.generate_response(
+            print(f"🎯 1단계: 대화 응답 생성...")
+            # 1단계: 대화 응답 생성
+            response_text = self.generate_conversation_response(
                 user_message, max_length, temperature
             )
+
+            print(f"🎯 2단계: 감정 분석...")
+            # 2단계: 생성된 응답의 감정 분석
+            emotion = self.analyze_emotion(user_message)
+
+            print(f"✅ 완료 - 응답: '{response_text[:30]}...', 감정: {emotion}")
             
             return {
                 "response": response_text,
                 "emotion": emotion
             }
+
         except Exception as e:
-            print(f"❌ 감정 응답 생성 중 오류: {e}")
+            print(f"❌ 2단계 응답 생성 중 오류: {e}")
             return {
                 "response": "미안, 뭐라고 말을 해야 할지 모르겠어.",
                 "emotion": "sad"
             }
 
+    def generate_response(
+            self,
+            user_message: str,
+            max_length: int = 100,
+            temperature: float = 0.7,
+            top_p: float = 0.9,
+            do_sample: bool = True
+    ) -> Tuple[str, str]:
+        """
+        기존 인터페이스 호환성을 위한 메서드
+
+        Returns:
+            Tuple[str, str]: (응답 텍스트, 감정 키워드)
+        """
+        result = self.generate_response_with_emotion(user_message, max_length, temperature)
+        return result["response"], result["emotion"]
+
     def generate_batch_responses(
             self,
             messages: List[str],
-            max_length: int = 512,
+            max_length: int = 100,
             temperature: float = 0.7
     ) -> List[Dict[str, str]]:
         """
-        배치 처리로 여러 메시지에 대한 응답 생성 (감정 포함)
+        배치 처리로 여러 메시지에 대한 응답 생성
 
         Args:
             messages: 사용자 메시지 리스트
@@ -286,12 +369,13 @@ class MidmLLMHandler:
         """
         responses = []
 
-        for message in messages:
+        for i, message in enumerate(messages, 1):
             try:
+                print(f"📝 배치 처리 {i}/{len(messages)}: '{message[:30]}...'")
                 result = self.generate_response_with_emotion(message, max_length, temperature)
                 responses.append(result)
             except Exception as e:
-                print(f"⚠️  배치 처리 중 오류 (메시지: '{message[:30]}...'): {e}")
+                print(f"⚠️ 배치 처리 중 오류 (메시지 {i}): {e}")
                 responses.append({
                     "response": "미안, 뭐라고 말을 해야 할지 모르겠어.",
                     "emotion": "sad"
@@ -301,11 +385,7 @@ class MidmLLMHandler:
 
     def get_available_emotions(self) -> List[str]:
         """사용 가능한 감정 키워드 목록 반환"""
-        return list(self.emotion_keywords.keys())
-
-    def get_emotion_keywords(self, emotion: str) -> List[str]:
-        """특정 감정의 키워드 목록 반환"""
-        return self.emotion_keywords.get(emotion, [])
+        return self.emotion_keywords.copy()
 
     def get_gpu_info(self) -> Optional[Dict]:
         """GPU 정보 반환"""
@@ -357,28 +437,29 @@ class MidmLLMHandler:
             print("🧹 모델 리소스가 정리되었습니다.")
 
         except Exception as e:
-            print(f"⚠️  리소스 정리 중 오류: {e}")
+            print(f"⚠️ 리소스 정리 중 오류: {e}")
 
 
 # 테스트용 메인 함수
 def main():
-    """독립 실행 테스트 (감정 분석 포함)"""
-    print("🎯 Midm-2.0 LLM 핸들러 테스트 (감정 분석)")
+    """독립 실행 테스트 (2단계 감정 분석)"""
+    print("🎯 Midm-2.0 LLM 핸들러 테스트 (2단계 감정 분석)")
     print("="*50)
 
     # 핸들러 초기화
     handler = MidmLLMHandler()
 
-    # 테스트 메시지들 (다양한 감정)
+    # 테스트 메시지들 (다양한 감정 유발)
     test_messages = [
-        "안녕하세요! 자기소개를 해주세요.",
-        "오늘 너무 기분이 좋아요!",
-        "시험에서 떨어져서 너무 슬퍼요...",
-        "갑자기 무서운 일이 생겼어요.",
-        "화가 너무 나서 미치겠어요!"
+        "안녕하세요! 오늘 기분이 어떠세요?",
+        "시험에 합격했어요! 너무 기뻐요!",
+        "친구가 약속을 갑자기 취소해서 속상해요...",
+        "밤에 혼자 집에 있는데 무서운 소리가 나요",
+        "버스에서 누가 새치기해서 정말 화가 나요!",
+        "이 바보야! 정말 실망이다."
     ]
 
-    print("\n🧪 감정 분석 응답 생성 테스트:")
+    print("\n🧪 2단계 감정 분석 테스트:")
     print("-" * 50)
 
     for i, message in enumerate(test_messages, 1):
@@ -396,7 +477,7 @@ def main():
 
             print(f"🤖 응답: {result['response']}")
             print(f"😊 감정: {result['emotion']}")
-            print(f"⏱️  처리시간: {elapsed_time:.2f}초")
+            print(f"⏱️ 총 처리시간: {elapsed_time:.2f}초")
 
         except Exception as e:
             print(f"❌ 오류 발생: {e}")

@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-이 코드는 서버에 들어있는 코드입니다.
-라즈베리파이에서는 실행할 수 없습니다!
-
 GPU 서버 FastAPI 메인 실행 코드
 라즈베리파이로부터 텍스트를 받아 Midm-2.0-Mini-Instruct 모델로 응답 생성
 """
@@ -173,7 +170,10 @@ async def chat(request: ChatRequest):
         emotion = result["emotion"]
         processing_time = time.time() - start_time
         
-        print(f"✅ 응답 생성 완료 (처리시간: {processing_time:.2f}초)")
+        # 개선: 2단계 처리 과정 반영
+        print(f"   2단계 응답 생성 완료 (처리시간: {processing_time:.2f}초)")
+        print(f"   1단계: 대화 응답 생성")
+        print(f"   2단계: 감정 분석 완료")
         print(f"   응답: '{response_text[:50]}{'...' if len(response_text) > 50 else ''}'")
         print(f"   감정: {emotion}")
 
@@ -213,7 +213,8 @@ async def health_check():
     if llm_handler:
         # 간단한 추론 테스트
         try:
-        test_result= llm_handler.generate_response_with_emotion("안녕", max_length=10)            health_status["test_inference"] = "success"
+            test_result= llm_handler.generate_response_with_emotion("안녕", max_length=10)
+            health_status["test_inference"] = "success"
         except:
             health_status["test_inference"] = "failed"
             health_status["status"] = "unhealthy"

@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 from conversation.stt import STTTester
 from conversation.tts import GoogleTTSClient
 from GPIO.gpio_recorder import get_gpio_recorder, cleanup_gpio
-from OLED.show_emotion import OLEDEmotion
+from oled.show_emotion import OLEDEmotion
 
 # .env 파일 로드
 load_dotenv()

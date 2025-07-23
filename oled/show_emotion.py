@@ -10,7 +10,7 @@ class OLEDEmotion:
         self.address = address
         self.rotate = rotate
 
-        self._initalize_device()
+        self._initialize_device()
 
     def _initialize_device(self):
         """OLED 디바이스 초기화"""
