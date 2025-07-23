@@ -18,6 +18,25 @@ def draw_start_screen():
     draw.text((30, 25), "START_ROBOT", fill=1)
     device.display(image)
 
+def draw_start_screen1():
+    image = Image.new("1", (128, 64), color=0)
+    draw = ImageDraw.Draw(image)
+    draw.text((20, 25), "LLM_LeeEunseo", fill=1)
+    device.display(image)
+
+def draw_start_screen2():
+    image = Image.new("1", (128, 64), color=0)
+    draw = ImageDraw.Draw(image)
+    draw.text((20, 19), "FaceTracking", fill=1)
+    draw.text((20, 31), "ParkMyoungWoo", fill=1)
+    device.display(image)
+
+def draw_start_screen3():
+    image = Image.new("1", (128, 64), color=0)
+    draw = ImageDraw.Draw(image)
+    draw.text((10, 25), "Hardware_AnJinHong", fill=1)
+    device.display(image)
+
 
 # --------------------------
 # 1. 감정 분류 함수
@@ -186,21 +205,30 @@ def draw_emotion_face(emotion):
            
     device.display(image)
 
+
 # --------------------------
 # 3. 실행 루프
 # --------------------------
 if __name__ == "__main__":
     try:
+        # 여기부터는 초기 실행 화면
         draw_start_screen()
-        
+        time.sleep(1.5)
+        draw_start_screen1()
         time.sleep(3)
+        draw_start_screen2()
+        time.sleep(3)
+        draw_start_screen3()
+        time.sleep(3)
+        # 초기 실행 화면 끝
+
         draw_emotion_face("neutral")
         
-        while True:
-            user_input = input("대화 입력: ")  # 실제 환경에서는 STT 결과가 여기에 들어옴
-            emotion = get_emotion(user_input)
-            print(f"[감정 분석] {user_input} -> {emotion}")
-            draw_emotion_face(emotion)
+        # while True:
+        #     user_input = input("대화 입력: ")  # 실제 환경에서는 STT 결과가 여기에 들어옴
+        #     emotion = get_emotion(user_input)
+        #     print(f"[감정 분석] {user_input} -> {emotion}")
+        #     draw_emotion_face(emotion)
     except KeyboardInterrupt:
         device.clear()
         print("프로그램 종료")

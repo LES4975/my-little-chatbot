@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 from conversation.stt import STTTester
 from conversation.tts import GoogleTTSClient
 from GPIO.gpio_recorder import get_gpio_recorder, cleanup_gpio
+from OLED.show_emotion import OLEDEmotion
 
 # .env 파일 로드
 load_dotenv()
@@ -35,6 +36,9 @@ class RobotConversationSystem:
         self.tts_client = None
         self.gpio_controller = None
         self.is_busy = False
+
+        # OLED 초기화
+        self.oled_emotion = OLEDEmotion()
         
         # GPIO 자동 실행 설정
         self.auto_mode = True
@@ -47,6 +51,10 @@ class RobotConversationSystem:
         
         # API 키 설정
         self.api_key = os.getenv("GPU_SERVER_API_KEY")
+
+        # 시작 화면 표시
+        if self.oled_emotion.is_initialized():
+            self.oled_emotion.show_startup_sequence()
         
         print("🤖 GPIO 기반 로봇 대화 시스템 초기화 완료")
         print(f"🌐 GPU 서버: {self.gpu_server_url}")
@@ -218,23 +226,24 @@ class RobotConversationSystem:
                 
                 if response_data.get('status') == 'success':
                     llm_response = response_data.get('response', '')
+                    emotion = response_data.get('emotion', 'neutral')
                     processing_time = response_data.get('processing_time', 0)
                     
                     print(f"✅ GPU 서버 응답 수신 완료 (처리시간: {processing_time:.2f}초)")
-                    return llm_response, processing_time
+                    return llm_response, emotion, processing_time
                 else:
                     print(f"❌ GPU 서버 처리 오류: {response_data.get('message', 'Unknown error')}")
-                    return None, 0
+                    return None, 'neutral', 0
             else:
                 print(f"❌ HTTP 요청 실패: {response.status_code}")
-                return None, 0
+                return None, 'neutral', 0
                 
         except requests.exceptions.Timeout:
             print("❌ GPU 서버 응답 시간 초과 (30초)")
-            return None, 0
+            return None, 'neutral', 0
         except Exception as e:
             print(f"❌ GPU 서버 통신 중 오류: {e}")
-            return None, 0
+            return None, 'neutral', 0
     
     async def speak_response(self, response_text: str):
         """응답 텍스트를 음성으로 변환하여 재생"""
@@ -288,7 +297,7 @@ class RobotConversationSystem:
                 }
             
             # 2단계: GPU 서버 통신
-            llm_response, llm_processing_time = await self.send_to_gpu_server(user_text, request_params)
+            llm_response, emotion, llm_processing_time = await self.send_to_gpu_server(user_text, request_params)
             if not llm_response:
                 return {
                     "status": "error",
@@ -297,9 +306,11 @@ class RobotConversationSystem:
                     "processing_time": time.time() - start_time
                 }
             
-            # 3단계: 음성 응답 재생
+            # 3단계: 표정 표시 후 음성 응답 재생
+            await self.change_oled_expression(emotion)
             speech_success = await self.speak_response(llm_response)
             
+
             total_time = time.time() - start_time
             
             return {
@@ -307,6 +318,7 @@ class RobotConversationSystem:
                 "message": "대화가 성공적으로 완료되었습니다." if speech_success else "LLM 응답은 받았지만 음성 재생에 실패했습니다.",
                 "user_text": user_text,
                 "llm_response": llm_response,
+                "emotion": emotion,
                 "processing_time": total_time,
                 "session_id": request_params.get("session_id")
             }
@@ -350,7 +362,7 @@ class RobotConversationSystem:
                 }
             
             # 2단계: GPU 서버 통신
-            llm_response, llm_processing_time = await self.send_to_gpu_server(user_text, request_params)
+            llm_response, emotion, llm_processing_time = await self.send_to_gpu_server(user_text, request_params)
             if not llm_response:
                 return {
                     "status": "error",
@@ -369,6 +381,7 @@ class RobotConversationSystem:
                 "message": "대화가 성공적으로 완료되었습니다." if speech_success else "LLM 응답은 받았지만 음성 재생에 실패했습니다.",
                 "user_text": user_text,
                 "llm_response": llm_response,
+                "emotion": emotion,
                 "processing_time": total_time,
                 "session_id": request_params.get("session_id")
             }
@@ -381,7 +394,15 @@ class RobotConversationSystem:
             }
         finally:
             self.is_busy = False
-    
+
+    async def change_oled_expression(self, emotion:str):
+        if self.oled_emotion and self.oled_emotion.is_initialized():
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self.oled_emotion.draw_emotion_face, emotion)
+        else:
+            print("⚠️ OLED 컨트롤러가 초기화되지 않았습니다.")
+
+
     async def periodic_resource_cleanup(self):
         """주기적 리소스 정리"""
         try:
@@ -461,6 +482,9 @@ class RobotConversationSystem:
             
             if self.stt_client:
                 self.stt_client.cleanup()
+
+            if self.oled_emotion:
+                self.oled_emotion.cleanup()
             
             # GPIO 정리
             cleanup_gpio()

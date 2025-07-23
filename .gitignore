@@ -10,3 +10,7 @@ __pycache__
 .lgd-nfy0
 
 GPIO/tact_push.py
+
+oled/faces
+
+.env

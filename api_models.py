@@ -20,6 +20,7 @@ class ConversationResponse(BaseModel):
     message: str
     user_text: Optional[str] = None
     llm_response: Optional[str] = None
+    emotion: Optional[str] = None
     processing_time: Optional[float] = None
     session_id: Optional[str] = None
 
