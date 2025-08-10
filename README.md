@@ -57,10 +57,10 @@ Face Tracking 기능을 수행하고 LLM을 탑재하여 사용자와 대화를 
 - **물리적 배치**: 머리(라즈베리파이) + 연결 케이블
 
 ### 유스케이스 시나리오
-![scenario](./usecase_scenario.txt)
+![scenario](./contents/usecase_scenario.txt)
 
 ### 유스케이스 다이어그램
-![diagram](./usecase_diagram.png)
+![diagram](./contents/usecase_diagram.png)
 ## Clone code
 
 프로젝트를 clone하는 방법을 설명합니다.
@@ -109,7 +109,7 @@ sudo pigpiod
 
 ## Output
 
-* (프로젝트 실행 화면 캡쳐)
+![output](./contents/output.jpg)
 
 
 ## Appendix
