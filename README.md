@@ -100,7 +100,8 @@ python server.py
 
 <img src="./contents/output.jpg" width=361 height=633>
 
-[![유튜브 동영상](https://img.youtube.com/vi/ceVe-onRdo8/0.jpg)](https://youtube.com/shorts/ceVe-onRdo8?feature=share)
+[![유튜브 동영상](https://img.youtube.com/vi/ceVe-onRdo8/maxresdefault.jpg)](https://youtube.com/shorts/ceVe-onRdo8?feature=share)
+*클릭하면 유튜브로 이동합니다*
 
 ## Appendix
 - 카메라 변경시 reboot 후 다시 실행해야합니다.
