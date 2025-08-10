@@ -54,8 +54,15 @@ Face Tracking 기능을 수행하고 LLM을 탑재하여 사용자와 대화를 
 git clone https://github.com/LES4975/my-little-chatbot.git
 ```
 
-## Prerequite
+이 프로젝트에는 세 가지의 실행 환경(Face Tracking용 라즈베리파이, LLM 대화 처리용 라즈베리파이, 외부 GPU 서버)에 사용해야 하는 코드가 모두 들어있습니다.
+프로젝트를 clone한 뒤, 필요한 코드를 각 환경에 저장합니다.
 
+- LLM 대화 처리용 라즈베리파이에는 본 프로젝트를 clone하기만 하면 됩니다.
+- Face Tracking용 라즈베리파이에는 본 프로젝트의 [face_tracking]('./face_tracking/') 디렉토리에 있는 [face_tracking.py]('./face_tracking/face_tracking.py')를 저장해야 합니다.
+- 외부 GPU 서버에는 본 프로젝트의 [code_in_server]('./code_in_server/') 디렉토리에 있는 코드들을 전부 저장해야 합니다.
+
+## Prerequite
+모든 개발환경에서 가상환경을 만들고 필요한 패키지를 설치합니다.
 ```shell
 python -m venv .venv
 source .venv/bin/activate
@@ -65,32 +72,48 @@ pip install -r requirements.txt
 
 ## Steps to run
 
-* (프로젝트 실행방법에 대해서 기술, 특별한 사용방법이 있다면 같이 기술)
-
+가상환경을 각 환경에서 실행합니다.
 ```shell
 cd ~/xxxx
 source .venv/bin/activate
-
-cd /path/to/repo/xxx/
-python demo.py -i xxx -m yyy -d zzz
 ```
 
+- Face Tracking용 라즈베리파이의 경우, Face Tracking 기능을 작동시키기 위해서는 아래 커맨드를 입력해야 합니다.
+```
 sudo pigpiod
+python face_tracking.py
+```
 
+- 미리 저장해 둔 STT/TTS API 키를 환경변수로 설정합니다. 설정했다면, LLM 대화용 라즈베리파이에서 main.py를 실행합니다.
+```
+python main.py
+```
 
+- 외부 GPU 서버에서는 server.py를 실행합니다.
+```
+python server.py
+```
+
+외부 GPU 서버와 LLM 대화용 라즈베리파이가 FastAPI로 통신하기 위해서 SSH 키 설정이 필요할 수도 있습니다.
 
 ## Output
 
 <img src="./contents/output.jpg" width=361 height=633>
 
+[![유튜브 동영상](https://img.youtube.com/vi/ceVe-onRdo8/0.jpg)](https://youtube.com/shorts/ceVe-onRdo8?feature=share)
 
 ## Appendix
+- 카메라 변경시 reboot 후 다시 실행해야합니다.
+- 추후 업그레이드할 여지가 있습니다.
 
-* (참고 자료 및 알아두어야할 사항들 기술)
+## Credits
 
-카메라 변경시 reboot 후 다시 실행해야합니다.
+### Language Model
+- **Midm-2.0**: [K-intelligence-Midm](https://github.com/K-intelligence-Midm/Midm-2.0)
 
-
+### APIs
+- **STT (Speech-to-Text)**: [OpenAI API](https://openai.com/api/)
+- **TTS (Text-to-Speech)**: [Google Cloud Platform](https://cloud.google.com/text-to-speech)
 
 
 
