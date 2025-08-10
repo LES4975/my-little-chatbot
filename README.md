@@ -109,7 +109,7 @@ sudo pigpiod
 
 ## Output
 
-![output](./contents/image.png)
+![output](./contents/image.jpg)
 
 
 ## Appendix
