@@ -109,7 +109,7 @@ sudo pigpiod
 
 ## Output
 
-![output](./contents/output.jpg)
+<img src="./contents/output.jpg" width=361 height=633>
 
 
 ## Appendix
